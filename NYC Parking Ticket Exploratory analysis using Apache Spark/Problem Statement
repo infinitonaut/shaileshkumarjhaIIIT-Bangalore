@@ -1,0 +1,81 @@
+Problem Statement:
+
+
+Big data analytics allows you to analyse data at scale. It has applications in almost every industry in the world. Let’s consider an unconventional application that you wouldn’t ordinarily encounter.
+
+ 
+
+New York City is a thriving metropolis. Just like most other metros that size, one of the biggest problems its citizens face is parking. The classic combination of a huge number of cars and cramped geography is the exact recipe that leads to a huge number of parking tickets.
+
+ 
+
+In an attempt to scientifically analyse this phenomenon, the NYC Police Department has collected data for parking tickets. Out of these, the data files for multiple years are publicly available on Kaggle. We will try and perform some exploratory analysis on a part of this data. Spark will allow us to analyse the full files at high speeds, as opposed to taking a series of random samples that will approximate the population. For the scope of this analysis, we wish to analyse the parking tickets over the year 2017. 
+
+ 
+
+Note: Although the broad goal of any analysis of this type would indeed be better parking and fewer tickets, we are not looking for recommendations on how to reduce the number of parking tickets - there are no specific points reserved for this.
+
+ 
+
+The purpose of this case study is to conduct an exploratory data analysis that helps you understand the data. Since the size of the dataset is large, your queries will take some time to run, and you will need to identify the correct queries quicker. The questions given below will guide your analysis.
+
+
+
+Accessing the dataset:
+
+The data for this case study has been placed in HDFS at the following path:
+
+'/common_folder/nyc_parking/Parking_Violations_Issued_-_Fiscal_Year_2017.csv'
+
+ 
+
+Questions to be answered in the analysis:
+
+The following analysis should be performed on RStudio mounted on your Corestack cluster, using the SparkR library. Remember that you need to summarise the analysis with your insights along with the code.
+
+ 
+
+Examine the data
+
+1. Find the total number of tickets for the year.
+2. Find out the number of unique states from where the cars that got parking tickets came from. (Hint: Use the column 'Registration State')
+There is a numeric entry '99' in the column which should be corrected. Replace it with the state having maximum entries. Give the number of unique states again.
+ 
+
+Aggregation tasks
+
+1. How often does each violation code occur? Display the frequency of the top five violation codes.
+2. How often does each 'vehicle body type' get a parking ticket? How about the 'vehicle make'? (Hint: find the top 5 for both)
+
+3. A precinct is a police station that has a certain zone of the city under its command. Find the (5 highest) frequency of tickets for each of the following:
+3.1 'Violation Precinct' (this is the precinct of the zone where the violation occurred). Using this, can you make any insights for parking violations in any specific areas of the city?
+3.2 'Issuer Precinct' (this is the precinct that issued the ticket)
+Here you would have noticed that the dataframe has 'Violating Precinct' or 'Issuing Precinct' as '0'. These are the erroneous entries. Hence, provide the record for five correct precincts. (Hint: Print top six entries after sorting)
+
+4. Find the violation code frequency across three precincts which have issued the most number of tickets - do these precinct zones have an exceptionally high frequency of certain violation codes? Are these codes common across precincts? 
+Hint: In the SQL view, use the 'where' attribute to filter among three precincts.
+
+5. You’d want to find out the properties of parking violations across different times of the day:
+5.1 Find a way to deal with missing values, if any.
+Hint: Check for the null values using 'isNull' under the SQL. Also, to remove the null values, check the 'dropna' command in the API documentation.
+
+5.2 The Violation Time field is specified in a strange format. Find a way to make this into a time attribute that you can use to divide into groups.
+
+5.3 Divide 24 hours into six equal discrete bins of time. The intervals you choose are at your discretion. For each of these groups, find the three most commonly occurring violations.
+Hint: Use the CASE-WHEN in SQL view to segregate into bins. For finding the most commonly occurring violations, a similar approach can be used as mention in the hint for question 4.
+
+5.4 Now, try another direction. For the three most commonly occurring violation codes, find the most common time of the day (in terms of the bins from the previous part)
+
+6. Let’s try and find some seasonality in this data
+6.1 First, divide the year into some number of seasons, and find frequencies of tickets for each season. (Hint: Use Issue Date to segregate into seasons)
+
+6.2 Then, find the three most common violations for each of these seasons.
+(Hint: A similar approach can be used as mention in the hint for question 4.)
+
+7. The fines collected from all the parking violation constitute a revenue source for the NYC police department. Let’s take an example of estimating that for the three most commonly occurring codes.
+7.1 Find total occurrences of the three most common violation codes
+7.2 Then, visit the website:
+http://www1.nyc.gov/site/finance/vehicles/services-violation-codes.page
+It lists the fines associated with different violation codes. They’re divided into two categories, one for the highest-density locations of the city, the other for the rest of the city. For simplicity, take an average of the two.
+7.3 Using this information, find the total amount collected for the three violation codes with maximum tickets. State the code which has the highest total collection.
+7.4 What can you intuitively infer from these findings?
