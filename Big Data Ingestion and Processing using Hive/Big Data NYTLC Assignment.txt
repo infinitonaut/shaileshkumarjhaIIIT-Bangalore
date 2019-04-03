@@ -1,0 +1,423 @@
+-- Data Ingestion and Processing Assignment
+-- PGDDS JUNE 2018 Cohort
+-- Shailesh Kumar Jha
+
+
+
+-- Adding the JAR File 
+ADD JAR /opt/cloudera/parcels/CDH/lib/hive/lib/hive-hcatalog-core-1.1.0-cdh5.11.2.jar;
+
+
+
+-- Creating external table
+create external table if not exists nytlc(
+vendorid int,
+tpep_pickup_datetime string,
+tpep_dropoff_datetime string,
+passenger_count int,
+trip_distance double,
+ratecodeid int,
+store_and_fwd_flag string,
+pulocationid int,
+dolocationid int,
+payment_type int,
+fare_amount double,
+extra double,
+mta_tax double,
+tip_amount double,
+tolls_amount double,
+improvement_surcharge double,
+total_amount double ) row format delimited fields terminated by ','
+location '/common_folder/nyc_taxi_data/'
+tblproperties ("skip.header.line.count"="1");
+
+
+
+-- --------------------
+-- Basic data quality checks
+-- --------------------
+
+
+
+--1 Records provided by TPEP
+
+
+select vendorid, count(*) as Number_Of_Records
+from nytlc
+group by vendorid
+order by vendorid;
+
+
+
+--2 Identifying data quality issues based on the information that the records are provided only for the month November and December for year 2017
+
+
+select year(tpep_pickup_datetime) as pickup_year, month(tpep_pickup_datetime) as pickup_month, count(*) as number_of_records
+from nytlc 
+group by year(tpep_pickup_datetime),month(tpep_pickup_datetime)
+order by pickup_year,pickup_month;
+-- Here 14 records are inconsistent
+
+
+select year(tpep_dropoff_datetime) as drop_year, month(tpep_dropoff_datetime) as drop_month, count(*) as number_of_records
+from nytlc
+group by year(tpep_dropoff_datetime),month(tpep_pickup_datetime)
+order by drop_year,drop_month;
+-- Here 117 records are inconsistent
+
+
+select count(*) as inconsistent_records
+from nytlc
+where unix_timestamp(tpep_pickup_timestamp)>unix_timestamp(tpep_dropoff_timestamp);
+-- There are '73' records where pickup timestamp is greater than drop off time stamp, hence these are inconsistent.
+
+
+--2.1 Vendor ID validation
+
+select count(*) as inconsistent_vendor_id
+from nytlc
+where vendorid not in (1,2);
+
+
+--2.2 tpep_pickup_datetime validation
+
+select count(*) as inconsistent_pickup_datetime
+from nytlc
+where concat(month(tpep_pickup_datetime),'-',year(tpep_pickup_datetime))
+not in ('11-2017','12-2017');
+
+
+--2.3 tpep_pickup_datetime validation
+
+select count(*) as inconsistent_dropoff_datetime
+from nytlc
+where concat(month(tpep_dropoff_datetime),'-',year(tpep_dropoff_datetime))
+not in ('11-2017','12-2017');
+
+
+--2.4 Passenger count validation
+
+select count(*) as inconsistent_passenger_count
+from nytlc
+where passenger_count <=0;
+-- Result is 6824
+
+
+--2.5 Trip distance validation
+
+select count(*) as inconsistent_trip_distance
+from nytlc
+where trip_distance<=0;
+-- Result is 7402
+
+
+--2.6 Rate code ID validation
+
+select count(*) as inconsistent_rate_code_id
+from nytlc
+where ratecodeid not in (1,2,3,4,5,6);
+-- Result is 9
+
+
+--2.7 Store and forward trip 
+
+select count(*) as inconsistent_store_fwd_trip
+from nytlc
+where store_and_fwd_flag not in ('Y','N');
+-- Result: No inconsistency
+
+
+--2.8 Longitude of meter disengangement validation
+
+select count(*) as inconsistent_pulocationid
+from nytlc
+where pulocationid is null;
+-- Result: No inconsistency
+
+
+--2.9 Latitude of meter disengangement validation
+
+select count(*) as inconsistent_dolocationid
+from nytlc
+where dolocationid is null;
+-- Result: No inconsistency
+
+
+--2.10 Payment type validation
+
+select count(*) as inconsistent_payment_type
+from nytlc
+where payment_type not in (1,2,3,4,5,6);
+-- Result: No inconsistency
+
+
+--2.11 Fare amount validation
+
+select count(*) as inconsistent_fare_amount
+from nytlc
+where fare_amount<=0;
+-- Result: 870
+
+
+--2.12 Extra charge validation
+
+select count(*) as inconsistent_extra_amount
+from nytlc
+where extra<0;
+-- Result: 286
+
+
+--2.13 Miscellaneous charge validation
+
+select count(*) as inconsistent_miscellaneous_charge
+from nytlc
+where mta_tax<0;
+-- Result: 544
+
+
+--2.14 Tip amount validation
+
+select count(*) as inconsistent_tip_amount
+from nytlc
+where tip_amount<0;
+-- Result: 4
+
+
+--2.15 Toll amount validation
+
+select count(*) as inconsistent_tolls_amount
+from nytlc
+where tolls_amount<0;
+-- Result: 3 
+
+
+--2.16 Improvement surcharge validation
+
+select count(*) as inconsistent_improvement_surcharge
+from nytlc
+where improvement_surcharge<0;
+-- Result: 558
+
+
+--2.17 Total amount validation 
+
+select count(*) as inconsistent_total_amount
+from nytlc
+where total_amount<0;
+-- Result: 558
+
+
+
+--3 Conclusion of information of vendors who are doing a bad job in providing the records using different columns of the dataset?
+
+select vendorid,count(*) as number_of_records
+from nytlc 
+where concat(month(tpep_pickup_datetime),'-',year(tpep_pickup_datetime))
+not in ('11-2017','12-2017') or passenger_count<=0 or trip_distance<=0 
+or ratecodeid not in (1,2,3,4,5,6)
+or fare_amount<=0 or extra<0 or mta_tax<0 or tip_amount<0
+or tolls_amount<0 or improvement_surcharge<0 or total_amount<0
+group by vendorid;  
+-- Vendor 1 is providing 11084 erroneous records
+-- Vendor 2 is providing 3674 erroneous records 
+-- Hence vendor 1 is doing bad job in providing records
+
+
+
+-- --------------------
+-- Analysis I
+-- --------------------
+
+
+
+-- Before partitioning we will run the following commands
+SET hive.exec.max.dynamic.partitions=100000;
+SET hive.exec.max.dynamic.partitions.pernode=100000;
+
+
+
+-- First creating ORC table
+create external table if not exists nytlc_partition_orc
+(vendorid int,
+tpep_pickup_datetime string,
+tpep_dropoff_datetime string,
+passenger_count int,
+trip_distance double,
+ratecodeid int,
+store_and_fwd_flag string,
+pulocationid int,
+dolocationid int,
+payment_type int,
+fare_amount double,
+extra double,
+mta_tax double,
+tip_amount double,
+tolls_amount double,
+improvement_surcharge double,
+total_amount double) partitioned by (mnth int, mday int)
+stored as orc
+location '/user/hive/warehouse/nyc_taxi_data'
+tblproperties ("orc.compress"="SNAPPY");
+
+
+
+-- Populating the ORC table and removing the erroneous rows
+insert overwrite table nytlc_partition_orc partition(mnth, mday)
+select vendorid, tpep_pickup_datetime, tpep_dropoff_datetime,
+passenger_count, trip_distance , ratecodeid,
+store_and_fwd_flag, pulocationid, dolocationid,
+payment_type, fare_amount , extra, mta_tax, 
+tip_amount, tolls_amount, improvement_surcharge, total_amount, 
+month(tpep_pickup_datetime) as mnth, day(tpep_pickup_datetime) as mday
+from nytlc
+where year(tpep_pickup_datetime)=2017 and month(tpep_pickup_datetime) in (11,12)
+and year(tpep_dropoff_datetime)=2017 and month(tpep_dropoff_datetime) in (11,12)
+and unix_timestamp(tpep_pickup_datetime) < unix_timestamp(tpep_dropoff_datetime)
+and passenger_count in (1,2,3,4,5,6) and trip_distance>0.0 
+and ratecodeid in (1,2,3,4,5,6) and payment_type in (1,2,3,4,5,6)
+and fare_amount >0 and extra in (0,0.5,1) and mta_tax in (0,0.5)
+and tip_amount >=0.0 and tolls_amount >=0.0 
+and improvement_surcharge in (0,0.3)
+and total_amount >0;
+
+
+
+---- Accessing some rows from orc table
+select * from nytlc_partition_orc
+where mnth in (11,12) and mday=30
+limit 10;
+
+
+
+--1 Comparing the average fare for November and December
+
+select month(tpep_pickup_datetime) as month_for_2017, avg(fare_amount) as average_fare
+from nytlc_partition_orc
+group by month(tpep_pickup_datetime);
+-- Average fare is greater for November compared to December
+
+
+
+--2 Exploring the number of passengers per trip
+
+select passenger_count as number_of_passengers,count(*) as no_of_trips
+from nytlc_partition_orc
+group by passenger_count
+order by passenger_count;
+-- Most of the passengers around 816.97k travel solo
+
+
+
+--3 Exploring the most preferred mode of payment
+
+select payment_type as mode_of_payment,count(*) as no_of_payments
+from nytlc_partition_orc
+group by payment_type
+order by no_of_payments desc;
+-- Payment type 1/ credit card is the most preferred mode of payment
+
+
+
+--4 Comparing average tip paid per trip with different quartiles
+
+select avg(tip_amount) as average_tip_paid,
+percentile_approx(tip_amount,0.25) as 25th_percentile,
+percentile_approx(tip_amount,0.50) as 50th_percentile,
+percentile_approx(tip_amount,0.75) as 75th_percentile
+from nytlc_partition_orc;
+
+
+
+--5 Exploring the ‘Extra’ (charge) variable - what fraction of total trips have an extra charge is levied?
+
+select count(*) as no_of_extra_charges
+from nytlc_partition_orc;
+
+select count(*) as no_of_extra_charges
+from nytlc;
+-- Number of trips with extra charges/ Total number of trips: 1153495/1174569=0.9820581
+
+
+
+-- --------------------
+-- Analysis II
+-- --------------------
+
+
+
+--1 Finding the correlation between the number of passengers on any given trip, 
+--  and the tip paid per trip and also find if  multiple travellers tip more compared
+--  to solo travellers.
+
+select round(corr(passenger_count,tip_amount),3)
+from nytlc_partition_orc;
+
+select round(avg(tip_amount),3) as solo_trip_average_tip
+from nytlc_partition_orc
+where passenger_count= 1;
+
+select round(avg(tip_amount),3) as group_trip_average_tip
+from nytlc_partition_orc
+where passenger_count!=1;
+-- Hence average tip 1.835 is more compared to average tip 1.802 of group
+
+
+
+--2 Segregating the data into five segments of ‘tip paid’: 
+--  [0-5), [5-10), [10-15) , [15-20) and >=20 and 
+--  Calculating the percentage share of each bucket 
+--  (i.e. the fraction of trips falling in each bucket).
+
+select count(*) as total_trips
+from nytlc_partition_orc; 
+
+select case when tip_amount>=0 and tip_amount<5 then 'tip_paid_0_5'
+when tip_amount>=5 and tip_amount<10 then 'tip_paid_5_10'
+when tip_amount>=10 and tip_amount<15 then 'tip_paid_10_15'
+when tip_amount>=15 and tip_amount<20 then 'tip_paid_15_20'
+when tip_amount>=20 then 'tip_paid_20_more'
+else 'NA' 		
+end as tip_bucket,
+count(*) as total_count,
+count(*)*100/1153495
+from nytlc_partition_orc
+group by case
+when tip_amount>=0 and tip_amount<5 then 'tip_paid_0_5'
+when tip_amount>=5 and tip_amount<10 then 'tip_paid_5_10'
+when tip_amount>=10 and tip_amount<15 then 'tip_paid_10_15'
+when tip_amount>=15 and tip_amount<20 then 'tip_paid_15_20'
+when tip_amount>=20 then 'tip_paid_20_more'
+else 'NA'
+end;
+
+
+
+--3 Finding which month has a greater average ‘speed’ - November or December.
+
+select month(tpep_pickup_datetime) as mnth,
+avg(trip_distance/((unix_timestamp(tpep_dropoff_datetime)-unix_timestamp(tpep_pickup_datetime))/3600)) as avg_speed_mph
+from nytlc_partition_orc
+group by month(tpep_pickup_datetime);
+-- avg speed for November is 10.966 mph
+-- avg speed for December is 11.065 mph
+-- Hence December has greater average 'speed'
+
+
+
+--4 Analysing the average speed of the most happening days of the year,
+--  i.e. 31st December (New year’s eve) and 25th December (Christmas) 
+--  and compare it with the overall average.
+
+select day(tpep_pickup_datetime) as day,
+month(tpep_pickup_datetime) as mnth,
+avg(trip_distance/((unix_timestamp(tpep_dropoff_datetime)-unix_timestamp(tpep_pickup_datetime))/3600)) as avg_speed_mph
+from nytlc_partition_orc
+where day(tpep_pickup_datetime) in (25,31)
+group by day(tpep_pickup_datetime),month(tpep_pickup_datetime);
+-- avg speed for 25th December is 15.265 mph
+-- avg speed for 31st December is 13.269 mph
+
+select avg(trip_distance/((unix_timestamp(tpep_dropoff_datetime)-unix_timestamp(tpep_pickup_datetime))/3600)) as avg_speed_mph
+from nytlc_partition_orc;
+-- Overall avg speed is 11.016 mph 
+
